@@ -1,7 +1,9 @@
 package com.cuzer.springbatchprocessor.configuration;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import javax.sql.DataSource;
@@ -10,23 +12,27 @@ import org.springframework.batch.core.Job;
 import org.springframework.batch.core.Step;
 import org.springframework.batch.core.configuration.annotation.JobBuilderFactory;
 import org.springframework.batch.core.configuration.annotation.StepBuilderFactory;
+import org.springframework.batch.item.ItemProcessor;
 import org.springframework.batch.item.database.JdbcPagingItemReader;
 import org.springframework.batch.item.database.Order;
 import org.springframework.batch.item.database.support.MySqlPagingQueryProvider;
-import org.springframework.batch.item.xml.StaxEventItemWriter;
+import org.springframework.batch.item.file.FlatFileItemWriter;
+import org.springframework.batch.item.support.CompositeItemProcessor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.io.FileSystemResource;
-import org.springframework.oxm.xstream.XStreamMarshaller;
+
 
 import com.cuzer.springbatchprocessor.domain.Customer;
+import com.cuzer.springbatchprocessor.domain.CustomerLineAggregator;
 import com.cuzer.springbatchprocessor.domain.CustomerRowMapper;
+import com.cuzer.springbatchprocessor.processor.FilteringItemProcessor;
 import com.cuzer.springbatchprocessor.processor.UpperCaseItemProcessor;
 
 @Configuration
-public class ItemProcessorJobConfiguration {
-
+public class CompositeJobConfiguration {
+	
 	@Autowired
 	public JobBuilderFactory jobBuilderFactory;
 
@@ -46,7 +52,7 @@ public class ItemProcessorJobConfiguration {
 
 		MySqlPagingQueryProvider queryProvider = new MySqlPagingQueryProvider();
 		queryProvider.setSelectClause("id, firstName, lastName, birthdate");
-		queryProvider.setFromClause("from testDB.CUSTOMER");
+		queryProvider.setFromClause("from customer");
 
 		Map<String, Order> sortKeys = new HashMap<>(1);
 
@@ -59,49 +65,51 @@ public class ItemProcessorJobConfiguration {
 		return reader;
 	}
 
-	@Bean
-	public StaxEventItemWriter<Customer> customerItemWriter() throws Exception {
+	
+	public FlatFileItemWriter<Customer> customerItemWriter() throws Exception {
+		FlatFileItemWriter<Customer> itemWriter = new FlatFileItemWriter<>();
 
-		XStreamMarshaller marshaller = new XStreamMarshaller();
-
-		Map<String, Class> aliases = new HashMap<>();
-		aliases.put("customer", Customer.class);
-
-		marshaller.setAliases(aliases);
-
-		StaxEventItemWriter<Customer> itemWriter = new StaxEventItemWriter<>();
-
-		itemWriter.setRootTagName("customers");
-		itemWriter.setMarshaller(marshaller);
-		String customerOutputPath = File.createTempFile("customerOutput", ".xml").getAbsolutePath();
+		itemWriter.setLineAggregator(new CustomerLineAggregator());
+		String customerOutputPath = File.createTempFile("customerOutput", ".out").getAbsolutePath();
 		System.out.println(">> Output Path: " + customerOutputPath);
 		itemWriter.setResource(new FileSystemResource(customerOutputPath));
-
 		itemWriter.afterPropertiesSet();
 
 		return itemWriter;
 	}
 
-	@Bean
-	public UpperCaseItemProcessor itemProcessor() {
-		return new UpperCaseItemProcessor();
+	
+	public CompositeItemProcessor<Customer, Customer> itemProcessor() throws Exception {
+
+		List<ItemProcessor<Customer, Customer>> delegates = new ArrayList<>(2);
+
+		delegates.add(new FilteringItemProcessor());
+		delegates.add(new UpperCaseItemProcessor());
+
+		CompositeItemProcessor<Customer, Customer> compositeItemProcessor =
+				new CompositeItemProcessor<>();
+
+		compositeItemProcessor.setDelegates(delegates);
+		compositeItemProcessor.afterPropertiesSet();
+
+		return compositeItemProcessor;
 	}
 
-//	@Bean
-//	public Step step111() throws Exception {
-//		return stepBuilderFactory.get("step111")
-//				.<Customer, Customer>chunk(10)
-//				.reader(pagingItemReader())
-//				.processor(itemProcessor())
-//				.writer(customerItemWriter())
-//				.build();
-//	}
-//
-//	@Bean
-//	public Job job() throws Exception {
-//		return jobBuilderFactory.get("job1111")
-//				.start(step111())
-//				.build();
-//	}
+	
+	public Step step1() throws Exception {
+		return stepBuilderFactory.get("step122")
+				.<Customer, Customer>chunk(10)
+				.reader(pagingItemReader())
+				.processor(itemProcessor())
+				.writer(customerItemWriter())
+				.build();
+	}
+
+	@Bean
+	public Job job() throws Exception {
+		return jobBuilderFactory.get("job222")
+				.start(step1())
+				.build();
+	}
 
 }
