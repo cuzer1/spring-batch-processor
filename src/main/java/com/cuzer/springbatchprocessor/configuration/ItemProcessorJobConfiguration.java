@@ -1,15 +1,32 @@
 package com.cuzer.springbatchprocessor.configuration;
 
+import java.io.File;
+import java.util.HashMap;
+import java.util.Map;
+
 import javax.sql.DataSource;
 
+import org.springframework.batch.core.Job;
+import org.springframework.batch.core.Step;
+import org.springframework.batch.core.configuration.annotation.JobBuilderFactory;
+import org.springframework.batch.core.configuration.annotation.StepBuilderFactory;
+import org.springframework.batch.item.database.JdbcPagingItemReader;
+import org.springframework.batch.item.database.Order;
+import org.springframework.batch.item.database.support.MySqlPagingQueryProvider;
+import org.springframework.batch.item.xml.StaxEventItemWriter;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.oxm.xstream.XStreamMarshaller;
 
+import com.cuzer.springbatchprocessor.domain.Customer;
 import com.cuzer.springbatchprocessor.domain.CustomerRowMapper;
+import com.cuzer.springbatchprocessor.processor.UpperCaseItemProcessor;
 
 @Configuration
 public class ItemProcessorJobConfiguration {
-	
+
 	@Autowired
 	public JobBuilderFactory jobBuilderFactory;
 
@@ -29,7 +46,7 @@ public class ItemProcessorJobConfiguration {
 
 		MySqlPagingQueryProvider queryProvider = new MySqlPagingQueryProvider();
 		queryProvider.setSelectClause("id, firstName, lastName, birthdate");
-		queryProvider.setFromClause("from customer");
+		queryProvider.setFromClause("from testDB.CUSTOMER");
 
 		Map<String, Order> sortKeys = new HashMap<>(1);
 
@@ -71,8 +88,8 @@ public class ItemProcessorJobConfiguration {
 	}
 
 	@Bean
-	public Step step1() throws Exception {
-		return stepBuilderFactory.get("step1")
+	public Step step111() throws Exception {
+		return stepBuilderFactory.get("step111")
 				.<Customer, Customer>chunk(10)
 				.reader(pagingItemReader())
 				.processor(itemProcessor())
@@ -82,8 +99,8 @@ public class ItemProcessorJobConfiguration {
 
 	@Bean
 	public Job job() throws Exception {
-		return jobBuilderFactory.get("job")
-				.start(step1())
+		return jobBuilderFactory.get("job1111")
+				.start(step111())
 				.build();
 	}
 
